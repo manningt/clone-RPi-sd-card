@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # script assumes the following device ID's and the following mount points (dirs) have been created
+#    create dirs command: sudo mkdir -p /mnt/boot2
 TARGET_SD='sda'
 SOURCE_SD='mmcblk0'
 BOOT_MOUNT_PATH='/mnt/boot2'
@@ -8,21 +9,13 @@ ROOT_MOUNT_PATH='/mnt/root2'
 NUM_PARTITIONS=4
 
 echo "Making sd: /dev/${TARGET_SD} using partitions from: /dev/${SOURCE_SD}"
-# partition leaving spaces for partitions to grow:
+# creates the following 4 partitions leaving spaces for partitions to grow:
 #Device        Start      End  Sectors  Size Type
 #/dev/sda1      8192   532479   524288  256M Microsoft basic data
 #/dev/sda2    532480 17309695 16777216    8G Linux filesystem
 # !!Note: there is space between sda2 and sda3 for an 8G, but only using 4G
 #/dev/sda3  17309696 25698303  8388608    4G F2FS (flash) or NTFS (mount on Mac) or Linux
 #/dev/sda4  25698304 59252735 33554432   16G as above filesystem
-
-# old version of partition table: to be deleted:
-#  sudo parted --script /dev/${TARGET_SD} mklabel gpt \
-#    unit s \
-#    mkpart primary fat32 8192s 532479s \
-#    mkpart primary ext4 532480s 8839167s \
-#    mkpart primary NTFS 12000000s 16193535s \
-#    mkpart primary NTFS 20000000s 36777983s
 
 do_parted_and_dd=1
 # NOTE: cannot use mklabel gpt (global partition table) - RPi doesn't recognize it
@@ -53,8 +46,6 @@ if [ $do_parted_and_dd == 1 ]; then
 fi
 
 # get partition ID's for source and target SD cards
-#NEW_PARTUUID="$(lsblk -o LABEL,PARTUUID $TARGET_DEV | grep rootfs | sed 's/rootfs //' | sed 's/-02//')"
-#PREV_PARTUUID="$(lsblk -o LABEL,PARTUUID $SOURCE_DEV | grep rootfs | sed 's/rootfs //' | sed 's/-02//')"
 
 # background: the new sd has new PARTUUIDs, so 2 files (/etc/fstab & /boot/cmdline.txt) on the new sd have
 #    to be changed to match
@@ -67,6 +58,12 @@ fi
 #  indicated in config.txt, loads kernel8.img into memory, and instructs the CPU to start executing the
 #  newly loaded code from kernel8.img.
 
+# the following was the first method, which assumes the partition IDs are of the format:
+#    306540d6-01, ie 9 characters followed by dash followed by partition number.
+#NEW_PARTUUID="$(lsblk -o LABEL,PARTUUID $TARGET_DEV | grep rootfs | sed 's/rootfs //' | sed 's/-02//')"
+#PREV_PARTUUID="$(lsblk -o LABEL,PARTUUID $SOURCE_DEV | grep rootfs | sed 's/rootfs //' | sed 's/-02//')"
+
+# the following method of getting the PARTUUID allows each ID to be a completely different format:
 NEW_PARTUUID=(0)
 PREV_PARTUUID=(0)
 PARTITION_NAMES=(0 boot root data mdata)
@@ -106,42 +103,4 @@ else
 fi
 sudo umount $ROOT_MOUNT_PATH
 
-# delete the following:
-non_array_code=0
-if [ $non_array_code == 1 ]; then
-  NEW_BOOT_PARTUUID="$(lsblk -o PARTUUID /dev/${TARGET_SD}1 | tail -1)"
-  NEW_ROOT_PARTUUID="$(lsblk -o PARTUUID /dev/${TARGET_SD}2 | tail -1)"
-  #NEW_DATA_PARTUUID="$(lsblk -o PARTUUID /dev/${TARGET_SD}3 | tail -1)"
-  #NEW_MDATA_PARTUUID="$(lsblk -o PARTUUID /dev/${TARGET_SD}4 | tail -1)"
-  PREV_BOOT_PARTUUID="$(lsblk -o NAME,PARTUUID /dev/${SOURCE_SD} | grep mmcblk0p1 | sed 's/.*blk0p1 //')"
-  PREV_ROOT_PARTUUID="$(lsblk -o NAME,PARTUUID /dev/${SOURCE_SD} | grep mmcblk0p2 | sed 's/.*blk0p2 //')"
-  #PREV_DATA_PARTUUID="$(lsblk -o NAME,PARTUUID /dev/${$SOURCE_SD} | grep mmcblk0p3 | sed 's/.*blk0p3 //')"
-  #PREV_MDATA_PARTUUID="$(lsblk -o NAME,PARTUUID /dev/${$SOURCE_SD} | grep mmcblk0p3 | sed 's/.*blk0p4 //')"
-
-  echo "Changing root PARTUUID=${PREV_ROOT_PARTUUID} in ${BOOT_MOUNT_PATH}/cmdline.txt to ${NEW_ROOT_PARTUUID}"
-  sudo mount /dev/${TARGET_SD}1 $BOOT_MOUNT_PATH
-  if [ -e ${BOOT_MOUNT_PATH}/cmdline.txt ]; then
-    sudo mv ${BOOT_MOUNT_PATH}/cmdline.txt ${BOOT_MOUNT_PATH}/cmdline-source-sd-partuuid.txt
-    sudo bash -c "sed 's/=${PREV_ROOT_PARTUUID}/=${NEW_ROOT_PARTUUID}/' ${BOOT_MOUNT_PATH}/cmdline-source-sd-partuuid.txt \
-     > ${BOOT_MOUNT_PATH}/cmdline.txt"
-  else
-    echo "ERROR: ${BOOT_MOUNT_PATH}/cmdline.txt does not exist!"
-  fi
-  sudo umount $BOOT_MOUNT_PATH
-
-  sudo mount /dev/${TARGET_SD}2 $ROOT_MOUNT_PATH
-  if [ -e ${ROOT_MOUNT_PATH}/etc/fstab ]; then
-    echo "Changing boot PARTUUID=${PREV_BOOT_PARTUUID} in ${ROOT_MOUNT_PATH}/etc/fstab to ${NEW_BOOT_PARTUUID}"
-    sudo mv ${ROOT_MOUNT_PATH}/etc/fstab ${ROOT_MOUNT_PATH}/etc/fstab-source-sd-partuuid-1
-    sudo bash -c "sed 's/${PREV_BOOT_PARTUUID}/${NEW_BOOT_PARTUUID}/g' ${ROOT_MOUNT_PATH}/etc/fstab-source-sd-partuuid-1 \
-     > ${ROOT_MOUNT_PATH}/etc/fstab"
-
-    echo "Changing root PARTUUID=${PREV_ROOT_PARTUUID} in ${ROOT_MOUNT_PATH}/etc/fstab to ${NEW_ROOT_PARTUUID}"
-    sudo mv ${ROOT_MOUNT_PATH}/etc/fstab ${ROOT_MOUNT_PATH}/etc/fstab-source-sd-partuuid-2
-    sudo bash -c "sed 's/${PREV_ROOT_PARTUUID}/${NEW_ROOT_PARTUUID}/g' ${ROOT_MOUNT_PATH}/etc/fstab-source-sd-partuuid-2 \
-     > ${ROOT_MOUNT_PATH}/etc/fstab"
-  else
-    echo "Error: ${ROOT_MOUNT_PATH}/etc/fstab does not exist!"
-  fi
-  sudo umount $ROOT_MOUNT_PATH
-fi
+echo "Done!"
