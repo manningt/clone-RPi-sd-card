@@ -35,7 +35,7 @@ if [ $do_parted_and_dd == 1 ]; then
   sudo mkfs.fat -n "boot" /dev/${TARGET_SD}1
   sudo mkfs.ext4 -Fq -L "root" /dev/${TARGET_SD}2
   sudo mkfs.f2fs -fq -l "data" /dev/${TARGET_SD}3
-  sudo mkfs.exfat -Fq -n "mdata" /dev/${TARGET_SD}4
+  sudo mkfs.exfat -q -n "mdata" /dev/${TARGET_SD}4
 
   echo "Copying the boot partition from /dev/${SOURCE_SD}p1 to /dev/${TARGET_SD}1"
   # could use cat or ddrescue instead; not using dd options: conv=noerror,sync - want to stop on errors
