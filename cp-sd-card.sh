@@ -1,4 +1,5 @@
 #!/bin/bash
+start=$(date +%s.%N)
 
 # script assumes the following device ID's and the following mount points (dirs) have been created
 #    create dirs command: sudo mkdir -p /mnt/boot2
@@ -89,11 +90,11 @@ sudo umount $BOOT_MOUNT_PATH
 
 sudo mount /dev/${TARGET_SD}2 $ROOT_MOUNT_PATH
 if [ -e ${ROOT_MOUNT_PATH}/etc/fstab ]; then
-  echo "Modifying PARTUUID in ${ROOT_MOUNT_PATH}/etc/fstab"
+  echo "Modifying PARTUUID in ${ROOT_MOUNT_PATH}/etc/fstab:"
   sudo cp ${ROOT_MOUNT_PATH}/etc/fstab ${ROOT_MOUNT_PATH}/etc/fstab-backup
   for (( n=1; n<=NUM_PARTITIONS; n++ ))
     do
-      echo "Changing ${PARTITION_NAMES[${n}]} PARTUUID=${PREV_PARTUUID[${n}]} to ${NEW_PARTUUID[${n}]}"
+      echo "  Changing ${PARTITION_NAMES[${n}]} PARTUUID=${PREV_PARTUUID[${n}]} to ${NEW_PARTUUID[${n}]}"
       sudo bash -c "sed 's/${PREV_PARTUUID[${n}]}/${NEW_PARTUUID[${n}]}/g' ${ROOT_MOUNT_PATH}/etc/fstab \
        > ${ROOT_MOUNT_PATH}/etc/fstab-tmp"
       sudo mv ${ROOT_MOUNT_PATH}/etc/fstab-tmp ${ROOT_MOUNT_PATH}/etc/fstab
@@ -103,4 +104,6 @@ else
 fi
 sudo umount $ROOT_MOUNT_PATH
 
-echo "Done!"
+duration=$(echo "$(date +%s.%N) - $start" | bc)
+execution_time=`printf "%.2f seconds." $duration`
+echo "Done! Execution time: $execution_time"
